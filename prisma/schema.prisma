@@ -1,0 +1,303 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MaterialStatus {
+  UPLOADING
+  PROCESSING
+  ANALYZING
+  READY
+  FAILED
+}
+
+enum ImportanceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  OPEN
+  FLASHCARD
+  CASE_BASED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ReviewRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
+model User {
+  id            String             @id @default(cuid())
+  email         String             @unique
+  passwordHash  String?
+  name          String             @default("Saida")
+  image         String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  materials     Material[]
+  quizzes       Quiz[]
+  flashcards    Flashcard[]
+  studySessions StudySession[]
+  performance   TopicPerformance[]
+}
+
+model Material {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  subject         String?
+  fileType        String
+  fileUrl         String
+  fileKey         String
+  fileSize        Int
+  pageCount       Int            @default(1)
+  status          MaterialStatus @default(UPLOADING)
+  processingStep  String?
+  processingError String?
+  summary         String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  chunks          DocumentChunk[]
+  topics          Topic[]
+  questions       Question[]
+  flashcards      Flashcard[]
+  quizzes         Quiz[]
+  pages           MaterialPage[]
+
+  @@index([userId, status])
+}
+
+model MaterialPage {
+  id            String   @id @default(cuid())
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  pageNumber    Int
+  extractedText String   @db.Text
+  imageUrl      String?  @db.Text
+  ocrQuality    Float?   @default(1.0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([materialId, pageNumber])
+  @@index([materialId])
+}
+
+model DocumentChunk {
+  id           String   @id @default(cuid())
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  chunkIndex   Int
+  pageNumber   Int
+  sectionTitle String?
+  content      String   @db.Text
+  tokenCount   Int
+  embedding    Json?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([materialId, pageNumber])
+}
+
+model Topic {
+  id            String          @id @default(cuid())
+  materialId    String
+  material      Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?         @db.Text
+  importance    ImportanceLevel @default(MEDIUM)
+  examRelevance ImportanceLevel @default(MEDIUM)
+  orderIndex    Int             @default(0)
+
+  concepts      Concept[]
+  questions     Question[]
+  flashcards    Flashcard[]
+  performance   TopicPerformance[]
+
+  @@index([materialId])
+}
+
+model Concept {
+  id                   String                @id @default(cuid())
+  topicId              String
+  topic                Topic                 @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  name                 String
+  definition           String                @db.Text
+  clinicalSignificance String?               @db.Text
+  orderIndex           Int                   @default(0)
+
+  facts                KeyFact[]
+  outgoingRelations    ConceptRelationship[] @relation("SourceConcept")
+  incomingRelations    ConceptRelationship[] @relation("TargetConcept")
+  questions            Question[]
+  flashcards           Flashcard[]
+
+  @@index([topicId])
+}
+
+model KeyFact {
+  id          String   @id @default(cuid())
+  conceptId   String
+  concept     Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  fact        String   @db.Text
+  sourcePage  Int?
+  isHighYield Boolean  @default(false)
+
+  @@index([conceptId])
+}
+
+model ConceptRelationship {
+  id               String  @id @default(cuid())
+  sourceConceptId  String
+  sourceConcept    Concept @relation("SourceConcept", fields: [sourceConceptId], references: [id], onDelete: Cascade)
+  targetConceptId  String
+  targetConcept    Concept @relation("TargetConcept", fields: [targetConceptId], references: [id], onDelete: Cascade)
+  relationshipType String
+  description      String?
+
+  @@index([sourceConceptId, targetConceptId])
+}
+
+model Question {
+  id                  String       @id @default(cuid())
+  materialId          String
+  material            Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  topicId             String
+  topic               Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  conceptId           String?
+  concept             Concept?     @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  type                QuestionType @default(MCQ)
+  difficulty          Difficulty   @default(MEDIUM)
+  prompt              String       @db.Text
+  options             Json
+  correctAnswer       String       @db.Text
+  explanation         String       @db.Text
+  distractorRationale Json?
+  sourceExcerpt       String       @db.Text
+  sourcePage          Int
+  validationStatus    String       @default("VALID")
+  timesAnswered       Int          @default(0)
+  timesCorrect        Int          @default(0)
+  createdAt           DateTime     @default(now())
+
+  quizQuestions       QuizQuestion[]
+
+  @@index([materialId, topicId])
+}
+
+model Quiz {
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  materialId       String?
+  material         Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  title            String
+  mode             String         @default("PRACTICE")
+  totalQuestions   Int
+  timeLimitMinutes Int?
+  score            Float?
+  isCompleted      Boolean        @default(false)
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  questions        QuizQuestion[]
+
+  @@index([userId, isCompleted])
+}
+
+model QuizQuestion {
+  id               String    @id @default(cuid())
+  quizId           String
+  quiz             Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  orderIndex       Int
+  selectedAnswer   String?
+  isCorrect        Boolean?
+  timeSpentSeconds Int?
+  answeredAt       DateTime?
+
+  @@index([quizId, questionId])
+}
+
+model Flashcard {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material          @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  topicId       String
+  topic         Topic             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  conceptId     String?
+  concept       Concept?          @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  front         String            @db.Text
+  back          String            @db.Text
+  sourceExcerpt String?           @db.Text
+  sourcePage    Int?
+  interval      Int               @default(1)
+  repetitions   Int               @default(0)
+  easeFactor    Float             @default(2.5)
+  nextReviewAt  DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+
+  reviews       FlashcardReview[]
+
+  @@index([userId, nextReviewAt])
+}
+
+model FlashcardReview {
+  id          String       @id @default(cuid())
+  flashcardId String
+  flashcard   Flashcard    @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  rating      ReviewRating
+  reviewedAt  DateTime     @default(now())
+
+  @@index([flashcardId])
+}
+
+model StudySession {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionType       String
+  durationSeconds   Int
+  questionsAnswered Int      @default(0)
+  accuracy          Float?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model TopicPerformance {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId         String
+  topic           Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  totalAttempts   Int      @default(0)
+  correctAttempts Int      @default(0)
+  accuracyRate    Float    @default(0.0)
+  isWeakTopic     Boolean  @default(false)
+  lastAttemptedAt DateTime @default(now())
+
+  @@unique([userId, topicId])
+  @@index([userId, isWeakTopic])
+}
