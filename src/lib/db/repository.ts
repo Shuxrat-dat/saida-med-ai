@@ -27,6 +27,114 @@ export async function getDefaultUser() {
 
 export class MedicalRepository {
   /**
+   * Deterministic mastery level 0-5 based on accuracy, attempts, and correct streak.
+   * 0 = не изучено, 1 = начато, 2 = изучается, 3 = базовое, 4 = хорошее, 5 = уверенное
+   */
+  static calculateMastery(accuracy: number, totalAttempts: number, streakCorrect = 0): number {
+    if (totalAttempts <= 0) return 0;
+    if (totalAttempts === 1) return accuracy >= 0.5 ? 1 : 1;
+    const rawScore = accuracy * 0.7 + Math.min(1, totalAttempts / 10) * 0.2 + Math.min(1, streakCorrect / 3) * 0.1;
+    let level = 1;
+    if (rawScore >= 0.35) level = 2;
+    if (rawScore >= 0.55) level = 3;
+    if (rawScore >= 0.75) level = 4;
+    if (rawScore >= 0.9 && totalAttempts >= 5 && streakCorrect >= 2) level = 5;
+    if (totalAttempts < 3 && level > 2) level = 2;
+    if (totalAttempts < 2 && level > 1) level = 1;
+    return level;
+  }
+
+  /**
+   * SM-2-inspired review interval adjustment for TopicPerformance.nextReviewAt.
+   * Returns new nextReviewAt Date and updated reviewCount/streakCorrect.
+   */
+  static adjustReviewInterval(params: {
+    currentReviewCount: number;
+    currentStreak: number;
+    accuracy: number;
+    totalAttempts: number;
+  }): { nextReviewAt: Date; newReviewCount: number; newStreak: number } {
+    const { currentReviewCount = 0, currentStreak = 0, accuracy, totalAttempts } = params;
+    let newStreak = currentStreak;
+    let intervalDays = 1;
+    if (accuracy >= 0.7) {
+      newStreak = currentStreak + 1;
+      const step = Math.min(newStreak, 6);
+      intervalDays = [1, 2, 4, 7, 14, 21, 30][step] ?? 30;
+      if (accuracy >= 0.9 && totalAttempts >= 5) intervalDays = Math.round(intervalDays * 1.2);
+    } else if (accuracy >= 0.4) {
+      newStreak = Math.max(0, currentStreak - 1);
+      intervalDays = 1;
+    } else {
+      newStreak = 0;
+      intervalDays = 0;
+    }
+    const next = new Date();
+    next.setHours(9, 0, 0, 0);
+    next.setDate(next.getDate() + Math.max(0, intervalDays));
+    return { nextReviewAt: next, newReviewCount: currentReviewCount + 1, newStreak };
+  }
+
+  /**
+   * READ: Returns topic performances due for review at or before the given date (default: today 23:59).
+   * Includes topic name, material info via joined TopicPerformance.topic relation.
+   */
+  static async getTopicsDueForReview(referenceDate?: Date): Promise<MockTopic[]> {
+    try {
+      const user = await getDefaultUser();
+      const refDate = referenceDate ?? new Date();
+      refDate.setHours(23, 59, 59, 999);
+      const duePerfs = await prisma.topicPerformance.findMany({
+        where: {
+          userId: user.id,
+          nextReviewAt: { lte: refDate },
+        },
+        include: {
+          topic: {
+            include: {
+              concepts: {
+                include: { facts: true },
+              },
+            },
+          },
+        },
+        orderBy: { nextReviewAt: "asc" },
+      });
+      return duePerfs.map((p) => ({
+        id: p.topic.id,
+        materialId: p.topic.materialId,
+        name: p.topic.name,
+        description: p.topic.description || "",
+        importance: p.topic.importance as any,
+        examRelevance: p.topic.examRelevance as any,
+        accuracyRate: p.accuracyRate,
+        totalAttempts: p.totalAttempts,
+        correctAttempts: p.correctAttempts,
+        isWeakTopic: p.isWeakTopic,
+        masteryLevel: p.masteryLevel,
+        lastStudiedAt: p.lastStudiedAt.toISOString(),
+        nextReviewAt: p.nextReviewAt.toISOString(),
+        reviewCount: p.reviewCount,
+        streakCorrect: p.streakCorrect,
+        concepts: p.topic.concepts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          definition: c.definition,
+          clinicalSignificance: c.clinicalSignificance || undefined,
+          facts: c.facts.map((f) => ({
+            fact: f.fact,
+            sourcePage: f.sourcePage || 1,
+            isHighYield: f.isHighYield,
+          })),
+        })),
+      }));
+    } catch (error: any) {
+      console.error("[Database Error] MedicalRepository.getTopicsDueForReview failed:", error?.code, error?.message || error);
+      throw error;
+    }
+  }
+
+  /**
    * READ: Returns all materials from PostgreSQL
    */
   static async getMaterials(): Promise<MockMaterial[]> {
@@ -394,6 +502,11 @@ export class MedicalRepository {
           totalAttempts: perf ? perf.totalAttempts : 0,
           correctAttempts: perf ? perf.correctAttempts : 0,
           isWeakTopic: perf ? perf.isWeakTopic : false,
+          masteryLevel: perf ? perf.masteryLevel : 0,
+          lastStudiedAt: perf ? perf.lastStudiedAt.toISOString() : undefined,
+          nextReviewAt: perf ? perf.nextReviewAt.toISOString() : undefined,
+          reviewCount: perf ? perf.reviewCount : 0,
+          streakCorrect: perf ? perf.streakCorrect : 0,
           concepts: t.concepts.map((c) => ({
             id: c.id,
             name: c.name,
@@ -678,7 +791,7 @@ export class MedicalRepository {
   }
 
   /**
-   * CREATE: Records a quiz session, updates question metrics, and updates topic performance in PostgreSQL
+   * CREATE: Records a quiz session, updates question metrics, and updates topic performance (mastery/review) in PostgreSQL
    */
   static async recordQuizSession(params: {
     materialId?: string;
@@ -696,7 +809,6 @@ export class MedicalRepository {
       const correctCount = answers.filter((a) => a.isCorrect).length;
       const accuracy = totalQuestions > 0 ? Number((correctCount / totalQuestions).toFixed(2)) : 0;
 
-      // 1. Create study session in PostgreSQL
       const dbSession = await prisma.studySession.create({
         data: {
           userId: user.id,
@@ -707,8 +819,7 @@ export class MedicalRepository {
         },
       });
 
-      // 2. Update Question stats & Topic Performance in PostgreSQL
-      const updatedTopics: MockTopic[] = [];
+      const perTopicStats = new Map<string, { total: number; correct: number; questionIds: string[] }>();
       for (const ans of answers) {
         if (ans.questionId) {
           try {
@@ -719,77 +830,107 @@ export class MedicalRepository {
                 timesCorrect: ans.isCorrect ? { increment: 1 } : undefined,
               },
             });
-          } catch {}
-        }
-
-        if (ans.topicId) {
-          const perf = await prisma.topicPerformance.findUnique({
-            where: {
-              userId_topicId: {
-                userId: user.id,
-                topicId: ans.topicId,
-              },
-            },
-          });
-          const curTotal = (perf?.totalAttempts || 0) + 1;
-          const curCorrect = (perf?.correctAttempts || 0) + (ans.isCorrect ? 1 : 0);
-          const curRate = Number((curCorrect / curTotal).toFixed(2));
-          const isWeak = curTotal >= 3 && curRate < 0.65;
-
-          const updatedPerf = await prisma.topicPerformance.upsert({
-            where: {
-              userId_topicId: {
-                userId: user.id,
-                topicId: ans.topicId,
-              },
-            },
-            create: {
-              userId: user.id,
-              topicId: ans.topicId,
-              totalAttempts: curTotal,
-              correctAttempts: curCorrect,
-              accuracyRate: curRate,
-              isWeakTopic: isWeak,
-            },
-            update: {
-              totalAttempts: curTotal,
-              correctAttempts: curCorrect,
-              accuracyRate: curRate,
-              isWeakTopic: isWeak,
-              lastAttemptedAt: new Date(),
-            },
-            include: {
-              topic: {
-                include: { concepts: { include: { facts: true } } },
-              },
-            },
-          });
-
-          if (updatedPerf.topic && !updatedTopics.find((u) => u.id === updatedPerf.topic.id)) {
-            updatedTopics.push({
-              id: updatedPerf.topic.id,
-              materialId: updatedPerf.topic.materialId,
-              name: updatedPerf.topic.name,
-              description: updatedPerf.topic.description || "",
-              importance: updatedPerf.topic.importance as any,
-              examRelevance: updatedPerf.topic.examRelevance as any,
-              accuracyRate: curRate,
-              totalAttempts: curTotal,
-              correctAttempts: curCorrect,
-              isWeakTopic: isWeak,
-              concepts: updatedPerf.topic.concepts.map((c) => ({
-                id: c.id,
-                name: c.name,
-                definition: c.definition,
-                clinicalSignificance: c.clinicalSignificance || undefined,
-                facts: c.facts.map((f) => ({
-                  fact: f.fact,
-                  sourcePage: f.sourcePage || 1,
-                  isHighYield: f.isHighYield,
-                })),
-              })),
-            });
+          } catch (e: any) {
+            console.warn(`[Database Warning] Question stat update failed for ${ans.questionId}:`, e?.message || e);
           }
+        }
+        if (ans.topicId) {
+          const key = ans.topicId;
+          if (!perTopicStats.has(key)) perTopicStats.set(key, { total: 0, correct: 0, questionIds: [] });
+          const stat = perTopicStats.get(key)!;
+          stat.total += 1;
+          if (ans.isCorrect) stat.correct += 1;
+          if (ans.questionId) stat.questionIds.push(ans.questionId);
+        }
+      }
+
+      const now = new Date();
+      const updatedTopics: MockTopic[] = [];
+      for (const [topicId, stat] of perTopicStats.entries()) {
+        const sessionAccuracy = stat.total > 0 ? stat.correct / stat.total : 0;
+        const existing = await prisma.topicPerformance.findUnique({
+          where: { userId_topicId: { userId: user.id, topicId } },
+        });
+
+        const curTotal = (existing?.totalAttempts || 0) + stat.total;
+        const curCorrect = (existing?.correctAttempts || 0) + stat.correct;
+        const curRate = Number((curCorrect / curTotal).toFixed(2));
+        const isWeak = curTotal >= 3 && curRate < 0.65;
+        const currentStreak = existing?.streakCorrect || 0;
+        const curStreak = sessionAccuracy >= 0.7 ? currentStreak + 1 : sessionAccuracy >= 0.4 ? Math.max(0, currentStreak - 1) : 0;
+        const masteryLevel = this.calculateMastery(curRate, curTotal, curStreak);
+
+        const intervalResult = this.adjustReviewInterval({
+          currentReviewCount: existing?.reviewCount || 0,
+          currentStreak: curStreak,
+          accuracy: sessionAccuracy,
+          totalAttempts: curTotal,
+        });
+
+        const updatedPerf = await prisma.topicPerformance.upsert({
+          where: { userId_topicId: { userId: user.id, topicId } },
+          create: {
+            userId: user.id,
+            topicId,
+            totalAttempts: curTotal,
+            correctAttempts: curCorrect,
+            accuracyRate: curRate,
+            isWeakTopic: isWeak,
+            masteryLevel,
+            lastAttemptedAt: now,
+            lastStudiedAt: now,
+            nextReviewAt: intervalResult.nextReviewAt,
+            reviewCount: intervalResult.newReviewCount,
+            streakCorrect: curStreak,
+          },
+          update: {
+            totalAttempts: curTotal,
+            correctAttempts: curCorrect,
+            accuracyRate: curRate,
+            isWeakTopic: isWeak,
+            masteryLevel,
+            lastAttemptedAt: now,
+            lastStudiedAt: now,
+            nextReviewAt: intervalResult.nextReviewAt,
+            reviewCount: intervalResult.newReviewCount,
+            streakCorrect: curStreak,
+          },
+          include: {
+            topic: {
+              include: { concepts: { include: { facts: true } } },
+            },
+          },
+        });
+
+        if (updatedPerf.topic && !updatedTopics.find((u) => u.id === updatedPerf.topic.id)) {
+          updatedTopics.push({
+            id: updatedPerf.topic.id,
+            materialId: updatedPerf.topic.materialId,
+            name: updatedPerf.topic.name,
+            description: updatedPerf.topic.description || "",
+            importance: updatedPerf.topic.importance as any,
+            examRelevance: updatedPerf.topic.examRelevance as any,
+            accuracyRate: curRate,
+            totalAttempts: curTotal,
+            correctAttempts: curCorrect,
+            isWeakTopic: isWeak,
+            masteryLevel,
+            lastStudiedAt: now.toISOString(),
+            nextReviewAt: intervalResult.nextReviewAt.toISOString(),
+            reviewCount: intervalResult.newReviewCount,
+            streakCorrect: curStreak,
+            concepts: updatedPerf.topic.concepts.map((c) => ({
+              id: c.id,
+              name: c.name,
+              definition: c.definition,
+              clinicalSignificance: c.clinicalSignificance || undefined,
+              facts: c.facts.map((f) => ({
+                fact: f.fact,
+                sourcePage: f.sourcePage || 1,
+                isHighYield: f.isHighYield,
+              })),
+            })),
+          });
         }
       }
 
@@ -846,10 +987,11 @@ export class MedicalRepository {
   static async getStudyStats(): Promise<StudyStats> {
     try {
       const user = await getDefaultUser();
-      const [topics, sessions, performances] = await Promise.all([
+      const [topics, sessions, performances, dueTopics] = await Promise.all([
         this.getTopicsByMaterial(),
         this.getStudySessions(),
         prisma.topicPerformance.findMany({ where: { userId: user.id } }),
+        this.getTopicsDueForReview(),
       ]);
 
       let totalAttempts = 0;
@@ -871,7 +1013,7 @@ export class MedicalRepository {
         0
       );
       const dailyGoal = 50;
-      const dailyProgressPct = Math.min(100, Math.round((completedToday / dailyGoal) * 100));
+      const dailyProgressPct = dailyGoal > 0 ? Math.min(100, Math.round((completedToday / dailyGoal) * 100)) : 0;
 
       const weakTopics = topics.filter(
         (t) => t.isWeakTopic || (t.totalAttempts >= 3 && t.accuracyRate < 0.65)
@@ -889,6 +1031,10 @@ export class MedicalRepository {
         }
       }
 
+      const totalTopicsStudied = topics.filter((t) => t.totalAttempts > 0).length;
+      const topicsDueToday = dueTopics;
+      const dueTodayCount = topicsDueToday.length;
+
       return {
         streakDays: sessions.length > 0 ? 1 : 0,
         overallAccuracy,
@@ -900,6 +1046,9 @@ export class MedicalRepository {
         completedToday,
         dailyGoal,
         dailyProgressPct,
+        totalTopicsStudied,
+        topicsDueToday,
+        dueTodayCount,
       };
     } catch (error: any) {
       console.error("[Database Error] MedicalRepository.getStudyStats failed:", error?.code, error?.message || error);

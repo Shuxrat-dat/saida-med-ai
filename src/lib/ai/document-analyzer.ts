@@ -1,4 +1,4 @@
-import { openai, isLiveAIConfigured } from "./client";
+import { getActiveAIConfig, isLiveAIConfigured } from "./client";
 import { DocumentAnalysisSchema } from "./schemas";
 import { SemanticChunk } from "../parsers/types";
 import { z } from "zod";
@@ -35,8 +35,9 @@ export class DocumentAnalyzer {
 Текст лекции:
 ${sampleText}`;
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+      const { client, model } = getActiveAIConfig();
+      const completion = await client.chat.completions.create({
+        model,
         messages: [
           {
             role: "system",

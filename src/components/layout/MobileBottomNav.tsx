@@ -17,7 +17,7 @@ export function MobileBottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass-nav border-t border-slate-200/80 safe-area-bottom">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-nav border-t border-slate-200/80 safe-area-bottom safe-area-left safe-area-right pb-[max(env(safe-area-inset-bottom),0.5rem)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] landscape-mobile-compact">
       <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-around">
         {navItems.map((item) => {
           const isActive =
@@ -30,7 +30,7 @@ export function MobileBottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className="relative flex flex-col items-center justify-center py-1 px-3 text-xs font-medium transition-colors duration-150 ios-press"
+              className="relative flex flex-col items-center justify-center py-1 px-3 text-xs font-medium transition-colors duration-150 ios-press min-h-[48px] min-w-[56px]"
             >
               <div className="relative">
                 <Icon

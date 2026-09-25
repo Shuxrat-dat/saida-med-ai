@@ -113,8 +113,8 @@ export default function LibraryPage() {
       </div>
 
       {/* Поиск и фильтр дисциплин */}
-      <div className="space-y-2 mb-4">
-        <div className="relative">
+      <div className="space-y-2 mb-4 md:flex md:items-center md:space-y-0 md:gap-4">
+        <div className="relative md:w-80 md:shrink-0">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -126,7 +126,7 @@ export default function LibraryPage() {
         </div>
 
         {/* Чипы фильтра дисциплин */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
+        <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1 text-xs min-w-0 flex-1">
           {[
             { id: "ALL", label: "Все предметы" },
             { id: "Анатомия", label: "Анатомия" },
@@ -149,17 +149,17 @@ export default function LibraryPage() {
       </div>
 
       {/* Список учебных материалов */}
-      <div className="space-y-3">
+      <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3 md:gap-4 lg:grid-cols-3 xl:grid-cols-4 xl:gap-4">
         {isLoading ? (
           <>
-            {[1, 2, 3].map((n) => (
+            {[1, 2, 3, 4].map((n) => (
               <div
                 key={n}
-                className="p-4 rounded-3xl bg-white border border-slate-100 shadow-ios-card animate-pulse"
+                className="p-4 rounded-3xl bg-white border border-slate-100 shadow-ios-card animate-pulse min-w-0 max-w-sm"
               >
                 <div className="flex items-start space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-slate-100 shrink-0" />
-                  <div className="flex-1 space-y-2 py-1">
+                  <div className="flex-1 space-y-2 py-1 min-w-0">
                     <div className="h-3.5 bg-slate-100 rounded-md w-3/4" />
                     <div className="h-2.5 bg-slate-100 rounded-md w-1/2" />
                   </div>
@@ -173,7 +173,7 @@ export default function LibraryPage() {
             {filtered.map((mat) => (
           <div
             key={mat.id}
-            className="p-4 rounded-3xl bg-white border border-slate-100 shadow-ios-card block hover:border-teal-200 transition-all"
+            className="p-4 rounded-3xl bg-white border border-slate-100 shadow-ios-card block hover:border-teal-200 transition-all min-w-0 max-w-sm"
           >
             <Link href={`/library/${mat.id}`} className="block ios-press">
               <div className="flex items-start justify-between">
@@ -185,16 +185,16 @@ export default function LibraryPage() {
                       <FileText className="w-5 h-5" />
                     )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h3 className="text-xs font-bold text-slate-900 truncate">
                       {mat.title}
                     </h3>
-                    <div className="flex items-center space-x-2 mt-0.5 text-[11px] text-slate-500">
-                      <span className="font-semibold text-teal-800">{mat.subject}</span>
-                      <span>•</span>
-                      <span>{mat.pageCount} стр.</span>
-                      <span>•</span>
-                      <span className="uppercase text-[10px]">
+                    <div className="flex items-center space-x-2 mt-0.5 text-[11px] text-slate-500 min-w-0">
+                      <span className="font-semibold text-teal-800 truncate">{mat.subject}</span>
+                      <span className="shrink-0">•</span>
+                      <span className="shrink-0">{mat.pageCount} стр.</span>
+                      <span className="shrink-0">•</span>
+                      <span className="uppercase text-[10px] shrink-0">
                         {mat.fileType === "camera_scan" ? "Скан" : mat.fileType}
                       </span>
                     </div>
@@ -216,26 +216,26 @@ export default function LibraryPage() {
 
               {/* Аннотация от AI */}
               {mat.summary && (
-                <p className="text-[11px] text-slate-500 line-clamp-2 mt-2.5 leading-relaxed bg-slate-50/70 p-2.5 rounded-2xl border border-slate-100">
+                <p className="text-[11px] text-slate-500 line-clamp-2 mt-2.5 leading-relaxed bg-slate-50/70 p-2.5 rounded-2xl border border-slate-100 min-w-0">
                   {mat.summary}
                 </p>
               )}
             </Link>
 
             {/* Метрики в футере карточки и кнопки действий */}
-            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <div className="flex items-center space-x-3">
-                <span className="flex items-center space-x-1">
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 min-w-0 gap-2">
+              <div className="flex items-center space-x-3 min-w-0">
+                <span className="flex items-center space-x-1 shrink-0">
                   <Sparkles className="w-3.5 h-3.5 text-teal-600" />
                   <span>{mat.topicsCount} тем</span>
                 </span>
-                <span className="flex items-center space-x-1">
+                <span className="flex items-center space-x-1 shrink-0">
                   <Layers className="w-3.5 h-3.5 text-indigo-500" />
                   <span>{mat.questionsCount} вопросов</span>
                 </span>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 shrink-0">
                 {mat.pages && mat.pages.length > 0 && (
                   <button
                     onClick={() => setEditingMaterial(mat)}
@@ -259,7 +259,7 @@ export default function LibraryPage() {
         ))}
 
         {filtered.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-3xl border border-slate-100 p-6">
+          <div className="text-center py-12 bg-white rounded-3xl border border-slate-100 p-6 sm:col-span-2 lg:col-span-3 xl:col-span-4">
             <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <p className="text-xs font-bold text-slate-700">Материалы не найдены</p>
             <p className="text-[11px] text-slate-400 mt-0.5">

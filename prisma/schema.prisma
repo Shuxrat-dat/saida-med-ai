@@ -231,8 +231,10 @@ model QuizQuestion {
   question         Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
   orderIndex       Int
   selectedAnswer   String?
+  userAnswerText   String?   @db.Text
   isCorrect        Boolean?
   timeSpentSeconds Int?
+  responseTimeMs   Int?
   answeredAt       DateTime?
 
   @@index([quizId, questionId])
@@ -296,8 +298,14 @@ model TopicPerformance {
   correctAttempts Int      @default(0)
   accuracyRate    Float    @default(0.0)
   isWeakTopic     Boolean  @default(false)
+  masteryLevel    Int      @default(0)
   lastAttemptedAt DateTime @default(now())
+  lastStudiedAt   DateTime @default(now())
+  nextReviewAt    DateTime @default(now())
+  reviewCount     Int      @default(0)
+  streakCorrect   Int      @default(0)
 
   @@unique([userId, topicId])
   @@index([userId, isWeakTopic])
+  @@index([userId, nextReviewAt])
 }

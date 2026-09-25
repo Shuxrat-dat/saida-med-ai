@@ -1,10 +1,11 @@
 import { getActiveAIConfig, isLiveAIConfigured } from "./client";
-import { TopicDeepExplainerSchema } from "./schemas";
+import { MissingSectionSchema, TopicDeepExplainerSchema } from "./schemas";
 import { SemanticChunk } from "@/lib/parsers/types";
 import { MockConcept } from "@/lib/db/mock-data";
 import { z } from "zod";
 
 export type TopicDeepExplanation = z.infer<typeof TopicDeepExplainerSchema>;
+export type MissingSection = z.infer<typeof MissingSectionSchema>;
 
 export class TopicExplainer {
   static async explainTopic(params: {
@@ -20,46 +21,46 @@ export class TopicExplainer {
     }
 
     try {
-      const { client, model, provider } = getActiveAIConfig();
+      const { client, model } = getActiveAIConfig();
+
+      const hasContext = chunks.length > 0 || concepts.length > 0;
 
       const contextText = chunks
-        .slice(0, 8)
+        .slice(0, 10)
         .map((c) => `[Стр. ${c.pageNumber}] ${c.content}`)
         .join("\n\n");
 
       const conceptsHint = concepts
-        .map((c) => `• ${c.name}: ${c.definition} (Клин. знач: ${c.clinicalSignificance || "важно"})`)
+        .map((c) => `• ${c.name}: ${c.definition}${c.clinicalSignificance ? ` (Клин. знач: ${c.clinicalSignificance})` : ""}`)
         .join("\n");
 
-      const prompt = `Ты — ведущий профессор медицинского университета и клинический наставник студентки Саиды.
-Твоя задача — «разжевать» тему «${topicName}» из материала «${materialTitle}» так, чтобы всё стало кристально понятно.
+      const prompt = `Ты — профессор медицинского университета, персональный наставник Саиды. Разбираешь тему «${topicName}» из конспекта «${materialTitle}».
 
-КОНТЕКСТ МАТЕРИАЛА:
-${contextText || "Используй базовые клинические факты по этой теме."}
+ПРАВИЛО №1 (КРИТИЧЕСКОЕ): ИСПОЛЬЗУЙ ТОЛЬКО ФАКТЫ ИЗ ЗАГРУЖЕННОГО МАТЕРИАЛА.
+Если какой-то раздел отсутствует в конспекте — НЕ ВЫДУМЫВАЙ! Вместо этого добавь его ключ в missingFromSource и напиши короткое объяснение, почему пропускаешь (например: «в материале нет информации о методах лечения»).
+Для отсутствующих разделов заполни поле текстом: «Информация отсутствует в предоставленном материале» и одновременно включи его в missingFromSource.
 
-КЛЮЧЕВЫЕ ПОНЯТИЯ ТЕМЫ:
-${conceptsHint || "Разбери базовые физиологические и патогенетические механизмы."}
+${hasContext ? `КОНТЕКСТ МАТЕРИАЛА (используй ТОЛЬКО эти факты):
+${contextText}
 
-ТРЕБОВАНИЯ К РАЗБОРУ:
-1. simpleOverview: объясни суть темы простыми словами («на пальцах»), используя яркую медицинскую аналогию.
-2. keyMechanisms: 3–4 пошаговых физиологических/клеточных механизма (stepNumber, title, explanation).
-3. clinicalMnemonicsAndPearls: 2–3 клинические мнемоники или золотых правила для запоминания.
-4. examTraps: 2–3 частые ловушки и дистракторы на медицинских экзаменах (pitfall + clarification).
-5. sourcePageReferences: массив номеров страниц, встречающихся в контексте (например [12, 13, 14]).
+КЛЮЧЕВЫЕ ПОНЯТИЯ ИЗ КОСПЕКТА:
+${conceptsHint || "концепты не указаны"}` : `ИСХОДНЫЙ МАТЕРИАЛ ОТСУТСТВУЕТ. Отметь ВСЕ разделы в missingFromSource, за исключением простого общего описания whatIsIt, которое можно дать на общем уровне.`}
 
-Ответ верни строго в формате JSON по схеме:
-{
-  "topicName": "${topicName}",
-  "simpleOverview": "...",
-  "keyMechanisms": [
-    { "stepNumber": 1, "title": "...", "explanation": "..." }
-  ],
-  "clinicalMnemonicsAndPearls": ["..."],
-  "examTraps": [
-    { "pitfall": "...", "clarification": "..." }
-  ],
-  "sourcePageReferences": [1, 2]
-}`;
+СТРУКТУРА ОБЪЯСНЕНИЯ (8 обязательных блоков на чистом русском):
+1. whatIsIt: Что это такое? Простое, медицински корректное определение, аналогия если уместна.
+2. whyItOccurs: Почему возникает? Причины, этиология, триггеры, факторы риска.
+3. pathogenesis: Механизм / патогенез. Как именно развивается — пошаговый каскад.
+4. mainSigns: Основные признаки. Симптомы, синдромы, объективные данные, жалобы.
+5. classification: Классификация. Стадии, степени, виды, формы.
+6. diagnostics: Диагностика. Методы обследования, критерии, лабораторные/инструментальные данные.
+7. treatmentApproaches: Лечение / подходы. Терапия согласно конспекту.
+8. keyPointsToRemember: Что особенно важно запомнить — массив 3–5 high-yield пунктов.
+
+ДОПОЛНИТЕЛЬНО:
+- sourcePageReferences: массив номеров страниц из контекста (если есть).
+- missingFromSource: массив {sectionKey, reason} — какие блоки не описаны в исходном материале. Допустимые ключи: whatIsIt, whyItOccurs, pathogenesis, mainSigns, classification, diagnostics, treatmentApproaches, keyPointsToRemember.
+
+Ответ ТОЛЬКО JSON по схеме TopicDeepExplainerSchema.`;
 
       const completion = await client.chat.completions.create({
         model,
@@ -67,23 +68,54 @@ ${conceptsHint || "Разбери базовые физиологические 
           {
             role: "system",
             content:
-              "Вы — выдающийся профессор клинической медицины. Разъясняйте сложные темы предельно наглядно, строго научно и на чистом русском языке в формате валидного JSON.",
+              "Вы — профессор клинической медицины и персональный наставник Саиды. Отвечаете ТОЛЬКО валидным JSON. СТРОГО ИСПОЛЬЗУЙТЕ ТОЛЬКО ФАКТЫ ИЗ МАТЕРИАЛА; отсутствующую информацию помечайте в missingFromSource.",
           },
           { role: "user", content: prompt },
         ],
         response_format: { type: "json_object" },
-        temperature: 0.2,
+        temperature: 0.22,
+        max_tokens: 2200,
       });
 
       const raw = completion.choices[0]?.message?.content;
       if (!raw) throw new Error("Empty AI explanation response");
 
       const parsed = JSON.parse(raw);
-      return TopicDeepExplainerSchema.parse(parsed);
+      const validated = TopicDeepExplainerSchema.safeParse(parsed);
+      if (!validated.success) {
+        console.warn("Topic explainer schema mismatched, running repair:", validated.error.issues.slice(0, 3));
+        return this.repairWithDefaults(parsed, topicName);
+      }
+      return validated.data;
     } catch (error) {
       console.warn("Live AI topic explanation failed, using high-yield medical fallback:", error);
       return this.generateFallbackExplanation(topicName, materialTitle, concepts);
     }
+  }
+
+  private static repairWithDefaults(parsed: any, topicName: string): TopicDeepExplanation {
+    const missing: MissingSection[] = [];
+    const safeStr = (v: any, key: string) => {
+      if (typeof v === "string" && v.trim().length > 0) return v;
+      missing.push({ sectionKey: key, reason: "Не удалось извлечь из ответа AI" });
+      return "Информация отсутствует в предоставленном материале";
+    };
+    const keyPoints = Array.isArray(parsed?.keyPointsToRemember) && parsed.keyPointsToRemember.length > 0
+      ? parsed.keyPointsToRemember.filter((s: any) => typeof s === "string")
+      : (missing.push({ sectionKey: "keyPointsToRemember", reason: "Не удалось извлечь из ответа AI" }), []);
+    return {
+      topicName: parsed?.topicName || topicName,
+      whatIsIt: safeStr(parsed?.whatIsIt, "whatIsIt"),
+      whyItOccurs: safeStr(parsed?.whyItOccurs, "whyItOccurs"),
+      pathogenesis: safeStr(parsed?.pathogenesis, "pathogenesis"),
+      mainSigns: safeStr(parsed?.mainSigns, "mainSigns"),
+      classification: safeStr(parsed?.classification, "classification"),
+      diagnostics: safeStr(parsed?.diagnostics, "diagnostics"),
+      treatmentApproaches: safeStr(parsed?.treatmentApproaches, "treatmentApproaches"),
+      keyPointsToRemember: keyPoints,
+      sourcePageReferences: Array.isArray(parsed?.sourcePageReferences) ? parsed.sourcePageReferences : [],
+      missingFromSource: Array.isArray(parsed?.missingFromSource) ? [...missing, ...parsed.missingFromSource] : missing,
+    };
   }
 
   private static generateFallbackExplanation(
@@ -91,141 +123,85 @@ ${conceptsHint || "Разбери базовые физиологические 
     materialTitle: string,
     concepts: MockConcept[]
   ): TopicDeepExplanation {
-    const isCvs = topicName.toLowerCase().includes("сердц") || topicName.toLowerCase().includes("проводящ");
-    const isPharm = topicName.toLowerCase().includes("адрено") || topicName.toLowerCase().includes("рецептор");
+    const missingGeneric: MissingSection[] = [
+      { sectionKey: "classification", reason: "Обобщённый fallback-разбор — классификация не уточнена по исходному материалу" },
+      { sectionKey: "diagnostics", reason: "Обобщённый fallback-разбор — методы диагностики не уточнены по исходному материалу" },
+      { sectionKey: "treatmentApproaches", reason: "Обобщённый fallback-разбор — подходы к лечению не уточнены по исходному материалу" },
+    ];
+
+    const isCvs = topicName.toLowerCase().includes("сердц") || topicName.toLowerCase().includes("проводящ") || topicName.toLowerCase().includes("карди");
+    const isPharm = topicName.toLowerCase().includes("адрено") || topicName.toLowerCase().includes("рецептор") || topicName.toLowerCase().includes("фармак");
 
     if (isCvs) {
       return {
         topicName,
-        simpleOverview:
+        whatIsIt:
           "Представь проводящую систему сердца как электрическую сеть в умном доме: синусовый узел — это главный генератор частоты (пейсмейкер), а АВ-узел — это предохранитель с задержкой, чтобы предсердия успели полностью вытолкнуть кровь в желудочки до систолы.",
-        keyMechanisms: [
-          {
-            stepNumber: 1,
-            title: "Генерация импульса в СА-узле (медленная диастолическая деполяризация)",
-            explanation:
-              "Обусловлена If-каналами (funny channels), пропускающими ионы Na+, и кальциевыми каналами Т-типа. Базовая частота генерации — 60–100 импульсов в минуту.",
-          },
-          {
-            stepNumber: 2,
-            title: "Физиологическая задержка в АВ-узле (0,09–0,12 с)",
-            explanation:
-              "Скорость проведения падает из-за тонких волокон и малого числа щелевых контактов (gap junctions). Это даёт время предсердиям сократиться и наполнить желудочки (предсердная надбавка 15–20%).",
-          },
-          {
-            stepNumber: 3,
-            title: "Быстрое распространение по ножкам пучка Гиса и волокнам Пуркинье",
-            explanation:
-              "Скорость достигает 4 м/с за счёт высокой экспрессии коннексина-43, обеспечивая мгновенную одновременную систолу верхушки и стенок обоих желудочков снизу вверх.",
-          },
-        ],
-        clinicalMnemonicsAndPearls: [
-          "Правило 'СА — Сверху и Автономно, АВ — Автоматическая Выдержка времени'.",
-          "Правый блуждающий нерв сильнее управляет СА-узлом (хронотропия), левый — АВ-узлом (дромотропия).",
-          "Интервал PR на ЭКГ отражает именно время проведения от предсердий через АВ-узел до пучка Гиса.",
-        ],
-        examTraps: [
-          {
-            pitfall: "Думать, что ионы Na+ через быстрые каналы вызывают деполяризацию СА-узла, как в обычном миокарде.",
-            clarification:
-              "В СА- и АВ-узлах нет фазы 0 на быстрых натриевых каналах (они инактивированы); фаза 0 деполяризации узлов обусловлена входящим током Ca2+ через L-каналы!",
-          },
-          {
-            pitfall: "Считать, что полная блокада АВ-узла приводит к немедленной остановке желудочков.",
-            clarification:
-              "Активируются пейсмейкеры 3-го порядка (пучок Гиса или волокна Пуркинье) с идиовентрикулярным ритмом 25–40 уд/мин.",
-          },
+        whyItOccurs:
+          "Сердечная проводящая система развивается из специализированных кардиомиоцитов, утративших сократительную функцию ради генерации и проведения импульса. Нарушения возникают при ишемии, воспалении (миокардит), фиброзе, электролитных сдвигах (K+, Ca2+) или генетических канальопатиях.",
+        pathogenesis:
+          "Импульс возникает в СА-узле (If-каналы Na+, Т-type Ca2+), распространяется по предсердиям → АВ-узел (физиологическая задержка 0,09–0,12 с) → пучок Гиса → ножки → волокна Пуркинье → сокращение желудочков снизу вверх.",
+        mainSigns:
+          "При поражении проводящей системы: брадикардия, головокружение, синкопе, приступы Морганьи–Адамса–Стокса, одышка, слабость. На ЭКГ: удлинение PR, расширение QRS, выпадение зубцов P/QRS, AV-блокада I–III степени.",
+        classification: "Информация отсутствует в предоставленном материале",
+        diagnostics: "Информация отсутствует в предоставленном материале",
+        treatmentApproaches: "Информация отсутствует в предоставленном материале",
+        keyPointsToRemember: [
+          "СА-узел 60–100 уд/мин — пейсмейкер первого порядка.",
+          "АВ-узел — задержка 0,09–0,12 с для предсердной надбавки.",
+          "Волокна Пуркинье — скорость 4 м/с, одновременная систола обоих желудочков.",
+          "Нодаевая деполяризация — Ca2+ L-тип, а не быстрый Na+!",
         ],
         sourcePageReferences: [12, 13, 14],
+        missingFromSource: missingGeneric,
       };
     }
 
     if (isPharm) {
       return {
         topicName,
-        simpleOverview:
-          "Адренорецепторы — это 'тумблеры' симпатической нервной системы (реакция 'бей или беги'). Но разные органы имеют разные подтипы, чтобы организм мог адресно ускорить сердце, но при этом расширить бронхи для притока кислорода.",
-        keyMechanisms: [
-          {
-            stepNumber: 1,
-            title: "Альфа-1: Сосудосуживающий эффект через Gq-белок",
-            explanation:
-              "Активация фосфолипазы C → выработка IP3 и DAG → выброс Ca2+ из саркоплазматического ретикулума гладких мышц → спазм артериол и повышение ОПСС и АД.",
-          },
-          {
-            stepNumber: 2,
-            title: "Бета-1: Стимуляция сердца через Gs-белок",
-            explanation:
-              "Стимуляция аденилатциклазы → рост цАМФ → активация протеинкиназы A → фосфорилирование Ca2+-каналов L-типа → повышение ЧСС, силы сокращений и проводимости.",
-          },
-          {
-            stepNumber: 3,
-            title: "Бета-2: Расширение бронхов и сосудов мышц через Gs-белок",
-            explanation:
-              "В гладкой мускулатуре цАМФ ингибирует киназу легких цепей миозина (MLCK), вызывая стойкую дилатацию бронхов.",
-          },
-        ],
-        clinicalMnemonicsAndPearls: [
-          "Мнемоника органов: 1 сердце (Бета-1), 2 легких (Бета-2).",
-          "Альфа-2 рецепторы — это 'тормоз' (Gi), пресинаптическое аутоингибирование выброса норадреналина.",
-          "Селективные Бета-2 агонисты (сальбутамол) купируют приступ астмы без выраженной тахикардии.",
-        ],
-        examTraps: [
-          {
-            pitfall: "Считать, что норадреналин одинаково сильно стимулирует все рецепторы.",
-            clarification:
-              "Норадреналин почти не трогает Бета-2 рецепторы; бронходилатацию вызывает адреналин из надпочечников!",
-          },
-          {
-            pitfall: "Путать действие Бета-блокаторов у пациентов с астмой.",
-            clarification:
-              "Неселективные Бета-блокаторы (пропранолол) блокируют Бета-2 и вызывают смертельно опасный бронхоспазм у астматиков.",
-          },
+        whatIsIt:
+          "Адренорецепторы — это мембранные G-белковые рецепторы симпатической нервной системы. Активация — реакция «бей или беги», но разные подтипы в разных органах обеспечивают избирательность: сердце сокращается сильнее, а бронхи при этом расширяются.",
+        whyItOccurs:
+          "Симпатическая стимуляция → высвобождение норадреналина из пресинаптических окончаний + адреналин из мозгового слоя надпочечников → связывание с GPCR → внутриклеточные каскады (Gq/Gs/Gi).",
+        pathogenesis:
+          "α1 (Gq): PLC → IP3/DAG → Ca2+ → вазоконстрикция. β1 (Gs): AC↑ → cAMP↑ → PKA → Ca2+L↑ → инотропия/хронотропия/дромотропия. β2 (Gs): бронхиальная ГМ — ингибирование MLCK → бронходилатация, вазодилатация мышц. α2 (Gi) — пресинаптический тормоз выброса.",
+        mainSigns:
+          "При симпатикотонии: тахикардия, повышение АД, тахипноэ, сухость во рту, холодный пот, мидриаз, тремор. При блокаде β2 у астматиков — смертельно опасный бронхоспазм.",
+        classification: "Информация отсутствует в предоставленном материале",
+        diagnostics: "Информация отсутствует в предоставленном материале",
+        treatmentApproaches: "Информация отсутствует в предоставленном материале",
+        keyPointsToRemember: [
+          "Мнемоника: β1 — сердце (1 орган), β2 — лёгкие (2 дыхание).",
+          "Норадреналин слабо стимулирует β2 — бронходилатация = преимущественно адреналин!",
+          "Неселективные β-блокаторы у астматиков КАТЕГОРИЧЕСКИ ПРОТИВОПОКАЗАНЫ.",
         ],
         sourcePageReferences: [19, 20, 21],
+        missingFromSource: missingGeneric,
       };
     }
 
-    // Универсальный разбор на основе переданных концептов
-    const fallbackMechanisms = concepts.length > 0
-      ? concepts.slice(0, 3).map((c, i) => ({
-          stepNumber: i + 1,
-          title: c.name,
-          explanation: `${c.definition} ${c.clinicalSignificance ? `Клиническое значение: ${c.clinicalSignificance}` : ""}`,
-        }))
+    const conceptsList = concepts.slice(0, 3).map((c) => `• ${c.name}: ${c.definition}`).join("\n");
+    const keyPointsDefault = concepts.length > 0
+      ? concepts.slice(0, 3).map((c) => c.name + " — " + (c.clinicalSignificance || c.definition.slice(0, 60)))
       : [
-          {
-            stepNumber: 1,
-            title: "Анатомический и клеточный базис",
-            explanation: `Определяет морфологическую основу темы «${topicName}» и клеточные взаимосвязи.`,
-          },
-          {
-            stepNumber: 2,
-            title: "Физиологическая регуляция и сигнальные пути",
-            explanation: "Обеспечивает гомеостаз органа и адекватный ответ на внешние раздражители.",
-          },
-          {
-            stepNumber: 3,
-            title: "Патогенез нарушений и клиника",
-            explanation: "При повреждении регуляторных звеньев развиваются специфические симптомы и синдромы.",
-          },
+          "Причина → патогенез → клиника → лечение — причинно-следственная цепочка.",
+          "Связь симптома с повреждённым регуляторным звеном.",
+          "Механизм важнее заучивания названий.",
         ];
 
     return {
       topicName,
-      simpleOverview: `Тема «${topicName}» из курса «${materialTitle}» разбирает ключевые физиологические процессы и их патологические изменения. Понимание этих механизмов необходимо для точной диагностики и правильного выбора медикаментозной терапии.`,
-      keyMechanisms: fallbackMechanisms,
-      clinicalMnemonicsAndPearls: [
-        "Связывай клинический симптом напрямую с нарушенным физиологическим звеном.",
-        "Обращай внимание на причинно-следственные связи: причина → патогенез → клиника → лечение.",
-      ],
-      examTraps: [
-        {
-          pitfall: "Заучивание названий без понимания механизма действия.",
-          clarification: "В клинических тестах вопросы всегда строятся вокруг патогенетического звена, а не просто определений.",
-        },
-      ],
-      sourcePageReferences: [1, 2, 3],
+      whatIsIt: `Тема «${topicName}» из учебного материала «${materialTitle}» разбирает ключевые медицинские и физиологические процессы и их нарушения. ${conceptsList ? `Базовые понятия: ${conceptsList}` : ""}`,
+      whyItOccurs: "Причины и триггеры зависят от конкретной нозологии/процесса; согласно источнику — не уточнены детально. Общие группы: генетические факторы, окружающая среда, инфекционные агенты, аутоиммунные процессы, образ жизни.",
+      pathogenesis: "Патогенез представлен нарушением клеточных сигнальных путей, работы ионных каналов, клеточной пролиферации/апоптоза или воспалительного каскада — детали требуют уточнения по исходному материалу.",
+      mainSigns: "Основные симптомы и синдромы зависят от органа/системы и тяжести процесса. Общие группы: болевой синдром, дисфункция органа, лабораторные отклонения.",
+      classification: "Информация отсутствует в предоставленном материале",
+      diagnostics: "Информация отсутствует в предоставленном материале",
+      treatmentApproaches: "Информация отсутствует в предоставленном материале",
+      keyPointsToRemember: keyPointsDefault,
+      sourcePageReferences: [1, 2],
+      missingFromSource: missingGeneric,
     };
   }
 }

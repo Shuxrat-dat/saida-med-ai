@@ -1,4 +1,4 @@
-import { openai, isLiveAIConfigured } from "./client";
+import { getActiveAIConfig, isLiveAIConfigured } from "./client";
 import { AIExplanationSchema } from "./schemas";
 import { z } from "zod";
 
@@ -33,8 +33,9 @@ ${sourceExcerpt ? `Цитата из лекции/источника: "${sourceE
 
 Предоставь четкое, емкое клиническое объяснение на РУССКОМ ЯЗЫКЕ строго в формате JSON, соответствующем схеме. Избегай общих вводных фраз.`;
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+      const { client, model } = getActiveAIConfig();
+      const completion = await client.chat.completions.create({
+        model,
         messages: [
           {
             role: "system",

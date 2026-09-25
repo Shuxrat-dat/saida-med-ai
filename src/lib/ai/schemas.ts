@@ -72,24 +72,38 @@ export const AIExplanationSchema = z.object({
   sourceGroundedNote: z.string().describe("How this ties to the student's uploaded material"),
 });
 
+export const MissingSectionSchema = z.object({
+  sectionKey: z.string(),
+  reason: z.string().describe("Why this section is marked missing/not present in source material"),
+});
+
 export const TopicDeepExplainerSchema = z.object({
   topicName: z.string().describe("Name of the topic being explained"),
-  simpleOverview: z.string().describe("Explanation in plain words like an intuitive medical tutor"),
-  keyMechanisms: z.array(
-    z.object({
-      stepNumber: z.number(),
-      title: z.string(),
-      explanation: z.string(),
-    })
-  ).describe("Step-by-step physiological or pharmacological mechanisms"),
-  clinicalMnemonicsAndPearls: z.array(z.string()).describe("High-yield clinical pearls, memory rules, or mnemonics"),
-  examTraps: z.array(
-    z.object({
-      pitfall: z.string().describe("Common confusion or board exam distractor"),
-      clarification: z.string().describe("The exact truth according to medical evidence"),
-    })
-  ).describe("Common board exam traps and misunderstandings"),
+  whatIsIt: z.string().describe("1. Что это такое — простое и медицински корректное определение темы"),
+  whyItOccurs: z.string().describe("2. Почему возникает — этиология, причины, триггеры"),
+  pathogenesis: z.string().describe("3. Механизм / патогенез — ключевой патофизиологический каскад"),
+  mainSigns: z.string().describe("4. Основные признаки — симптомы, синдромы, объективные данные"),
+  classification: z.string().describe("5. Классификация — виды, стадии, степени, если есть в источнике"),
+  diagnostics: z.string().describe("6. Диагностика — методы обследования, критерии, если есть"),
+  treatmentApproaches: z.string().describe("7. Лечение / подходы — терапия согласно материалу, если описана"),
+  keyPointsToRemember: z.array(z.string()).describe("8. Что особенно важно запомнить — high-yield список"),
   sourcePageReferences: z.array(z.number()).describe("Page numbers referenced from the uploaded material"),
+  missingFromSource: z.array(MissingSectionSchema).describe("Разделы, которых НЕТ в исходном материале (AI их не выдумывал)"),
+});
+
+export const WeakSpotAreaSchema = z.object({
+  areaName: z.string().describe("Название области/понятия (тема или понятие)"),
+  accuracyPct: z.number().describe("Процент правильных ответов в этой области"),
+  evidence: z.array(z.string()).describe("Конкретные вопросы/ошибки, подтверждающие оценку"),
+});
+
+export const MistakeBreakdownSchema = z.object({
+  questionId: z.string().optional(),
+  concept: z.string(),
+  selectedAnswer: z.string(),
+  correctAnswer: z.string(),
+  whyWrong: z.string().describe("Короткое понятное объяснение: почему ответ пользователя неверен"),
+  sourcePage: z.number().optional(),
 });
 
 export const WeakSpotItemSchema = z.object({
@@ -108,4 +122,7 @@ export const WeakSpotDiagnosisSchema = z.object({
   overallAssessment: z.string().describe("Encouraging yet rigorous diagnostic evaluation of gaps"),
   identifiedGaps: z.array(WeakSpotItemSchema).describe("Specific conceptual weaknesses identified"),
   recommendedAction: z.string().describe("Concrete next study step to fix these weak spots"),
+  strongAreas: z.array(WeakSpotAreaSchema).describe("Области, в которых пользователь хорошо справился"),
+  weakAreas: z.array(WeakSpotAreaSchema).describe("Области, которые нужно повторить"),
+  mistakeBreakdown: z.array(MistakeBreakdownSchema).describe("Разбор каждой ошибки: почему ошиблась"),
 });

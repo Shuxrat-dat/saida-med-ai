@@ -163,98 +163,165 @@ export function TopicPreStudyModal({
               </div>
             ) : explanation ? (
               <div className="space-y-4">
-                {/* Суть простыми словами («на пальцах») */}
-                <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-100/80">
-                  <div className="flex items-center space-x-1.5 text-teal-800 font-bold text-xs mb-1.5">
-                    <Lightbulb className="w-4 h-4 text-teal-600" />
-                    <span>Суть темы простыми словами</span>
-                  </div>
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    {explanation.simpleOverview}
-                  </p>
-                </div>
+                {(() => {
+                  const missingSet = new Set(
+                    (explanation.missingFromSource || []).map((m) => m.sectionKey)
+                  );
+                  const sections: Array<{
+                    key: string;
+                    icon: React.ReactNode;
+                    title: string;
+                    bg: string;
+                    border: string;
+                    textColor: string;
+                    content: string;
+                  }> = [
+                    {
+                      key: "whatIsIt",
+                      icon: <Lightbulb className="w-4 h-4 text-teal-600" />,
+                      title: "Что это?",
+                      bg: "bg-teal-50/70",
+                      border: "border-teal-100/80",
+                      textColor: "text-teal-800",
+                      content: explanation.whatIsIt,
+                    },
+                    {
+                      key: "whyItOccurs",
+                      icon: <Sparkles className="w-4 h-4 text-amber-600" />,
+                      title: "Почему возникает?",
+                      bg: "bg-amber-50/60",
+                      border: "border-amber-100/80",
+                      textColor: "text-amber-800",
+                      content: explanation.whyItOccurs,
+                    },
+                    {
+                      key: "pathogenesis",
+                      icon: <BookOpen className="w-4 h-4 text-indigo-600" />,
+                      title: "Патогенез / механизм",
+                      bg: "bg-indigo-50/60",
+                      border: "border-indigo-100/80",
+                      textColor: "text-indigo-800",
+                      content: explanation.pathogenesis,
+                    },
+                    {
+                      key: "mainSigns",
+                      icon: <CheckCircle2 className="w-4 h-4 text-rose-500" />,
+                      title: "Основные признаки",
+                      bg: "bg-rose-50/60",
+                      border: "border-rose-100",
+                      textColor: "text-rose-800",
+                      content: explanation.mainSigns,
+                    },
+                    {
+                      key: "classification",
+                      icon: <BookOpen className="w-4 h-4 text-sky-600" />,
+                      title: "Классификация",
+                      bg: "bg-sky-50/60",
+                      border: "border-sky-100/80",
+                      textColor: "text-sky-800",
+                      content: explanation.classification,
+                    },
+                    {
+                      key: "diagnostics",
+                      icon: <AlertTriangle className="w-4 h-4 text-violet-600" />,
+                      title: "Диагностика",
+                      bg: "bg-violet-50/60",
+                      border: "border-violet-100/80",
+                      textColor: "text-violet-800",
+                      content: explanation.diagnostics,
+                    },
+                    {
+                      key: "treatmentApproaches",
+                      icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />,
+                      title: "Подходы к лечению",
+                      bg: "bg-emerald-50/60",
+                      border: "border-emerald-100/80",
+                      textColor: "text-emerald-800",
+                      content: explanation.treatmentApproaches,
+                    },
+                  ];
 
-                {/* Пошаговые механизмы */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center space-x-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Пошаговые механизмы</span>
-                  </h4>
-                  <div className="space-y-2">
-                    {explanation.keyMechanisms.map((mech) => (
-                      <div
-                        key={mech.stepNumber}
-                        className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60"
-                      >
-                        <div className="flex items-center space-x-2 text-xs font-bold text-slate-900 mb-1">
-                          <span className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center text-[11px]">
-                            {mech.stepNumber}
-                          </span>
-                          <span>{mech.title}</span>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed pl-7">
-                          {mech.explanation}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Клинические мнемоники и жемчужины */}
-                {explanation.clinicalMnemonicsAndPearls?.length > 0 && (
-                  <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/60">
-                    <div className="flex items-center space-x-1.5 text-amber-900 font-bold text-xs mb-2">
-                      <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>Клинические мнемоники и правила памяти</span>
-                    </div>
-                    <ul className="space-y-1.5 text-xs text-amber-950">
-                      {explanation.clinicalMnemonicsAndPearls.map((pearl, idx) => (
-                        <li key={idx} className="flex items-start space-x-2">
-                          <span className="text-amber-500 font-bold">•</span>
-                          <span className="leading-snug">{pearl}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Ловушки на экзамене */}
-                {explanation.examTraps?.length > 0 && (
-                  <div className="p-3.5 rounded-2xl bg-rose-50/50 border border-rose-100">
-                    <div className="flex items-center space-x-1.5 text-rose-900 font-bold text-xs mb-2">
-                      <AlertTriangle className="w-4 h-4 text-rose-600" />
-                      <span>Ловушки и дистракторы на экзамене</span>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      {explanation.examTraps.map((trap, idx) => (
-                        <div key={idx} className="bg-white/80 p-2.5 rounded-xl border border-rose-100/60">
-                          <p className="text-rose-800 font-semibold mb-0.5">
-                            Частая ошибка: {trap.pitfall}
+                  return (
+                    <>
+                      {sections.map((s) => (
+                        <div
+                          key={s.key}
+                          className={`p-4 rounded-2xl ${s.bg} border ${s.border}`}
+                        >
+                          <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+                            <div className={`flex items-center space-x-1.5 ${s.textColor}`}>
+                              {s.icon}
+                              <span>{s.title}</span>
+                            </div>
+                            {missingSet.has(s.key) && (
+                              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-600 text-[10px] font-semibold">
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>Нет в конспекте</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                            {s.content}
                           </p>
-                          <p className="text-slate-700 leading-relaxed">
-                            <span className="font-bold text-emerald-700">Как на самом деле: </span>
-                            {trap.clarification}
-                          </p>
                         </div>
                       ))}
-                    </div>
-                  </div>
-                )}
 
-                {/* Ссылки на страницы конспекта */}
-                {explanation.sourcePageReferences?.length > 0 && (
-                  <div className="flex items-center space-x-1.5 text-[11px] text-slate-500 pt-1">
-                    <span className="font-medium">Страницы в источнике:</span>
-                    {explanation.sourcePageReferences.map((pg) => (
-                      <span
-                        key={pg}
-                        className="px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-slate-700"
-                      >
-                        стр. {pg}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                      {/* Ключевые моменты на запоминание */}
+                      {explanation.keyPointsToRemember?.length > 0 && (
+                        <div className="p-4 rounded-2xl bg-yellow-50/70 border border-yellow-200/70">
+                          <div className="flex items-center space-x-1.5 text-yellow-800 font-bold text-xs mb-2">
+                            <Sparkles className="w-4 h-4 text-yellow-600" />
+                            <span>Что запомнить ⭐</span>
+                          </div>
+                          <ul className="space-y-1.5 text-xs text-slate-700">
+                            {explanation.keyPointsToRemember.map((point, idx) => (
+                              <li key={idx} className="flex items-start space-x-2">
+                                <span className="text-yellow-600 font-bold mt-0.5">{idx + 1}.</span>
+                                <span className="leading-snug">{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* missingFromSource summary */}
+                      {(explanation.missingFromSource?.length ?? 0) > 0 && (
+                        <div className="p-3.5 rounded-2xl bg-slate-100 border border-slate-200/60">
+                          <div className="flex items-center space-x-1.5 text-slate-700 font-bold text-[11px] mb-2">
+                            <AlertTriangle className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Разделы, не найденные в твоём материале:</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {explanation.missingFromSource!.map((m) => (
+                              <span
+                                key={m.sectionKey}
+                                title={m.reason}
+                                className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[10px] font-semibold text-slate-600"
+                              >
+                                ⚠️ {m.sectionKey}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ссылки на страницы конспекта */}
+                      {explanation.sourcePageReferences?.length > 0 && (
+                        <div className="flex items-center space-x-1.5 text-[11px] text-slate-500 pt-1">
+                          <span className="font-medium">Страницы в источнике:</span>
+                          {explanation.sourcePageReferences.map((pg) => (
+                            <span
+                              key={pg}
+                              className="px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-slate-700"
+                            >
+                              стр. {pg}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             ) : null}
           </div>
@@ -274,7 +341,7 @@ export function TopicPreStudyModal({
               }}
               className="py-2.5 px-5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm ios-press"
             >
-              <span>Готова! Начать тест</span>
+              <span>Я ознакомилась — начать тест</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

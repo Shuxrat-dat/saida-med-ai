@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Camera,
@@ -71,6 +71,32 @@ export function CameraScannerModal({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const retakeInputRef = useRef<HTMLInputElement>(null);
   const retakeTargetIndex = useRef<number | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+
+  // Сброс и закрытие
+  const handleCloseAll = () => {
+    setPages([]);
+    setIsProcessing(false);
+    setCreatedMaterial(null);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleCloseAll();
+    };
+    prevFocusRef.current = document.activeElement as HTMLElement;
+    window.addEventListener("keydown", handleKey);
+    const focusables = modalRef.current?.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])");
+    focusables?.[0]?.focus();
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      prevFocusRef.current?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -225,19 +251,11 @@ export function CameraScannerModal({
     }
   };
 
-  // Сброс и закрытие
-  const handleCloseAll = () => {
-    setPages([]);
-    setIsProcessing(false);
-    setCreatedMaterial(null);
-    onClose();
-  };
-
   const activePage = pages[activePreviewIndex] || pages[0];
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm">
         {/* Скрытые нативные инпуты камеры */}
         <input
           ref={cameraInputRef}
@@ -257,14 +275,15 @@ export function CameraScannerModal({
         />
 
         <motion.div
+          ref={modalRef}
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.2 }}
-          className="w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[92dvh] bg-slate-900 text-white rounded-none sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          className="w-full max-w-full sm:max-w-md md:max-w-lg lg:max-w-2xl bg-slate-900 text-white rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden max-h-[92dvh] md:max-h-[85vh] safe-area-top safe-area-bottom"
         >
           {/* Верхний бар iOS сканера */}
-          <div className="px-4 py-2.5 flex items-center justify-between border-b border-slate-800 shrink-0">
+          <div className="sticky top-0 z-10 bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b border-slate-800 shrink-0">
             <div className="flex items-center space-x-2">
               <div className="w-7 h-7 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
                 <Camera className="w-4 h-4" />
@@ -429,6 +448,7 @@ export function CameraScannerModal({
               {/* Главная область предпросмотра активной страницы */}
               <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden min-h-[200px]">
                 {activePage && (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={activePage.previewUrl}
                     alt={`Страница ${activePage.pageNumber}`}
@@ -494,6 +514,7 @@ export function CameraScannerModal({
                           : "border-slate-700 opacity-60 hover:opacity-100"
                       }`}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={p.previewUrl}
                         alt={`Превью ${p.pageNumber}`}

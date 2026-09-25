@@ -79,6 +79,10 @@
   }
 }
 
+html {
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
 /* iOS Safe Area & Native Scroll Helpers */
 .safe-area-top {
   padding-top: max(env(safe-area-inset-top, 0px), 12px);
@@ -86,6 +90,39 @@
 
 .safe-area-bottom {
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px);
+}
+
+.safe-area-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.safe-area-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.focus-ring-base {
+  @apply outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:rounded-md;
+}
+
+button,
+[role="button"],
+a[href],
+input,
+select,
+textarea {
+  @apply focus-ring-base;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .landscape-mobile-compact nav {
+    @apply h-12;
+  }
+  .landscape-mobile-compact nav svg {
+    @apply w-4 h-4;
+  }
+  .landscape-mobile-compact nav span {
+    @apply text-[10px];
+  }
 }
 
 .no-scrollbar::-webkit-scrollbar {

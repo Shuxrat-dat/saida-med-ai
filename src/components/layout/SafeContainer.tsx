@@ -15,8 +15,8 @@ export function SafeContainer({
   return (
     <main
       className={cn(
-        "w-full max-w-md mx-auto px-4 min-h-[100dvh] flex flex-col",
-        hasBottomNav ? "pb-24 pt-3" : "pb-8 pt-3",
+        "w-full mx-auto px-3 sm:px-4 lg:px-6 min-h-[100dvh] min-h-[100svh] flex flex-col max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-7xl",
+        hasBottomNav ? "pb-24 md:pb-10 pt-3" : "pb-8 md:pb-10 pt-3",
         className
       )}
     >

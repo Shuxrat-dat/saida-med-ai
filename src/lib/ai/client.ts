@@ -63,3 +63,21 @@ export const isLiveAIConfigured = () => {
   const config = getActiveAIConfig();
   return config.provider !== "MOCK";
 };
+
+// Safe diagnostic function — NEVER logs the key value itself
+export function logAIDiagnostics(): void {
+  const config = getActiveAIConfig();
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const keyPresent =
+    !!openaiKey &&
+    openaiKey.length > 20 &&
+    !openaiKey.startsWith("sk-mock") &&
+    !openaiKey.includes("[YOUR");
+  console.log("[AI Config Diagnostics]", {
+    provider: config.provider,
+    model: config.model,
+    openaiKeyPresent: keyPresent,
+    openaiKeyLength: openaiKey?.length ?? 0,
+    geminiKeyPresent: !!process.env.GEMINI_API_KEY,
+  });
+}

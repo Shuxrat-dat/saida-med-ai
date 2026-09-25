@@ -20,8 +20,18 @@ export class QuestionValidator {
 
     // 2. Check options for standard MCQ
     if (question.type === "MCQ") {
-      if (!question.options || question.options.length < 3) {
-        errors.push("MCQ must provide at least 3 distinct options.");
+      if (!question.options || question.options.length !== 4) {
+        errors.push(
+          `Вопрос должен содержать ровно 4 варианта ответа (получено ${question.options?.length ?? 0}).`
+        );
+      }
+
+      // Check for empty options
+      const emptyOptions = (question.options || []).filter(
+        (o) => !o || o.trim().length === 0
+      );
+      if (emptyOptions.length > 0) {
+        errors.push(`MCQ содержит ${emptyOptions.length} пустых варианта(ов) ответа.`);
       }
 
       // Check for duplicate options

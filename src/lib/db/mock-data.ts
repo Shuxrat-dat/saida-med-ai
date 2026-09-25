@@ -34,6 +34,11 @@ export interface MockTopic {
   totalAttempts: number;
   correctAttempts?: number;
   isWeakTopic: boolean;
+  masteryLevel?: number;
+  lastStudiedAt?: string;
+  nextReviewAt?: string;
+  reviewCount?: number;
+  streakCorrect?: number;
   concepts: MockConcept[];
 }
 
@@ -400,6 +405,9 @@ export interface StudyStats {
   completedToday: number;
   dailyGoal: number;
   dailyProgressPct: number;
+  totalTopicsStudied: number;
+  topicsDueToday: MockTopic[];
+  dueTodayCount: number;
 }
 
 export const INITIAL_STUDY_SESSIONS: MockStudySession[] = [

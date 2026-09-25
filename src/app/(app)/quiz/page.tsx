@@ -33,6 +33,7 @@ function QuizHubContent() {
     if (initialMode === "WEAK_TOPICS" || initialTopicId) {
       startQuizSession(initialMode, initialMaterialId, initialTopicId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startQuizSession = async (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Sparkles, Loader2, Award, GraduationCap, Compass } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AIExplanationResult } from "@/lib/ai/explainer";
@@ -23,6 +23,14 @@ export function AIExplainModal({
   const [mode, setMode] = useState<"BEGINNER" | "MEDICAL_STUDENT" | "EXAM_LEVEL">("MEDICAL_STUDENT");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AIExplanationResult | null>(null);
+
+  // Trigger initial explanation when modal opens (moved out of render phase to avoid infinite loop)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (result || loading) return;
+    fetchExplanation("MEDICAL_STUDENT");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -52,11 +60,6 @@ export function AIExplainModal({
       setLoading(false);
     }
   };
-
-  // Автоматический первичный запрос
-  if (!result && !loading) {
-    fetchExplanation("MEDICAL_STUDENT");
-  }
 
   return (
     <AnimatePresence>
